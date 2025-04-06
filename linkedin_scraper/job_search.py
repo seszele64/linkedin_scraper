@@ -53,20 +53,59 @@ class JobSearch(Scraper):
         company = base_element.find_element(
             By.CLASS_NAME, "artdeco-entity-lockup__subtitle"
         ).text
+        
+        company_linkedin_url = self.driver.find_element(
+            By.CLASS_NAME, "job-details-jobs-unified-top-card__company-name"
+        ).find_element(By.TAG_NAME, "a").get_attribute("href")
+
+        posted_date = self.driver.find_element(
+            By.CLASS_NAME, "job-details-jobs-unified-top-card__primary-description-container"
+        ).find_elements(
+            By.CLASS_NAME, "tvm__text--low-emphasis"
+        )[2].text.strip()
+
+        applicant_count = self.driver.find_element(
+            By.CLASS_NAME, "job-details-jobs-unified-top-card__primary-description-container"
+        ).find_elements(
+            By.CLASS_NAME, "tvm__text--low-emphasis"
+        )[4].text.strip()
+
+        # Get the job insights text
+        job_insight_element = self.driver.find_element(
+            By.CLASS_NAME, "job-details-jobs-unified-top-card__job-insight"
+        )
+        job_insight_text = job_insight_element.text
+        
+        # Find workplace type in the text
+        workplace_type = "Unknown"
+        for wt in c.WORKPLACE_TYPES:
+            if wt in job_insight_text:
+                workplace_type = wt
+                break
+                
+        # Find experience level in the text
+        experience = "Unknown"
+        for exp in c.EXPERIENCE_LEVELS:
+            if exp in job_insight_text:
+                experience = exp
+                break
+
         location = base_element.find_element(
             By.CLASS_NAME, "job-card-container__metadata-wrapper"
         ).text
         job_descriptions = self.driver.find_element(By.ID, "job-details").text
-        # job_descriptions = self.wait_for_element_to_load(
-        #     by=By.ID, name="job-details", base=base_element
-        # ).text
         job = Job(
             linkedin_url=linkedin_url,
             job_title=job_title,
             company=company,
+            company_linkedin_url=company_linkedin_url,
             location=location,
+            posted_date=posted_date,
+            applicant_count=applicant_count,
             job_description=job_descriptions,
             scrape=False,
+            workplace_type=workplace_type,
+            experience=experience,
             driver=self.driver,
         )
         return job

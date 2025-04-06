@@ -12,6 +12,8 @@ def list_of_job_to_pandas(job_list):
         "applicant_count": [],
         "job_description": [],
         "benefits": [],
+        "workplace_type": [],
+        "experience": [],
     }
     for job in job_list:
         dico_this_job = job.to_dict()

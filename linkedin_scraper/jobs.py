@@ -20,6 +20,8 @@ class Job(Scraper):
         applicant_count=None,
         job_description=None,
         benefits=None,
+        workplace_type=None,
+        experience=None,
         driver=None,
         close_on_complete=True,
         scrape=True,
@@ -35,6 +37,8 @@ class Job(Scraper):
         self.applicant_count = applicant_count
         self.job_description = job_description
         self.benefits = benefits
+        self.workplace_type = workplace_type
+        self.experience = experience
 
         if scrape:
             self.scrape(close_on_complete)
@@ -59,6 +63,8 @@ class Job(Scraper):
             "applicant_count": self.applicant_count,
             "job_description": self.job_description,
             "benefits": self.benefits,
+            "workplace_type": self.workplace_type,
+            "experience": self.experience,
         }
 
     def scrape_logged_in(self, close_on_complete=True):

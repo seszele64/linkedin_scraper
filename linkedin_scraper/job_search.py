@@ -179,11 +179,14 @@ class JobSearch(Scraper):
         self.focus()
         sleep(self.WAIT_FOR_ELEMENT_TIMEOUT)
 
-    def search(self, search_term: str, geoid: int) -> List[Job]:
-        url = (
-            os.path.join(self.base_url, "search")
-            + f"?keywords={urllib.parse.quote(search_term)}&geoId={geoid}&refresh=true"
-        )
+    def search(self, search_term: str, geoid: int, current_page_index: int = 1) -> List[Job]:
+        # Build URL with pagination parameter if needed
+        start_value = current_page_index * 24
+        url_params = f"keywords={urllib.parse.quote(search_term)}&geoId={geoid}&refresh=true"
+        if current_page_index > 1:
+            url_params += f"&start={start_value}"
+            
+        url = os.path.join(self.base_url, "search") + f"?{url_params}"
         self.driver.get(url)
         self.scroll_to_bottom()
         self.focus()
@@ -192,9 +195,7 @@ class JobSearch(Scraper):
         job_listing_class_name = "scaffold-layout__list"
         job_listing = self.wait_for_element_to_load(name=job_listing_class_name)
         job_listing = job_listing.find_element(By.XPATH, "./div[1]")
-        job_listing_class_name = str(job_listing.get_attribute("class")).replace(
-            "\n", ""
-        )
+        job_listing_class_name = str(job_listing.get_attribute("class")).replace("\n", "")
         print(f"Class name of the first div: {job_listing_class_name}")
         self.scroll_to_bottom_job_list(job_listing_class_name)
 

@@ -271,33 +271,104 @@ class JobSearch(Scraper):
         self.scroll_to_bottom_job_list(job_listing_class_name)
 
         job_results = []
-        while True:
-            job_cards = self.wait_for_all_elements_to_load(
-                name="job-card-list", base=job_listing
-            )
-            for job_card in job_cards:
-                try:
-                    job = self.scrape_job_card(job_card)
-                    job_results.append(job)
-                except Exception as e:
-                    # Handle the exception here
-                    print(f"Error parsing job card: {e}")
-                time.sleep(5)
+        current_page = current_page_index
+        max_pages = 20  # Set a reasonable limit to avoid infinite loops
+        
+        for page_num in range(current_page, current_page + max_pages):
             try:
-                next_page_button = self.driver.find_element(
-                    By.XPATH,
-                    # "//span[contains(@class, 'artdeco-button__text') and (contains(., 'Next') or contains(., 'Suivant'))]",
-                    # "//div[@class='pagination p4']/span[contains(@class, 'artdeco-button__text') and (contains(., 'Next') or contains(., 'Suivant'))]",
-                    "//div[contains(@class, 'jobs-search-pagination') and contains(@class, 'p4')]/button[contains(@class, 'artdeco-button') and .//*[contains(@class, 'artdeco-button__text') and (text()='Next' or text()='Suivant')]]",
+                # Process job cards on the current page
+                job_cards = self.wait_for_all_elements_to_load(
+                    name="job-card-list", base=job_listing
                 )
-                next_page_button.click()
-                # Wait for at least one job card to load on the new page
-                self.wait_for_element_to_load(
-                    by=By.CLASS_NAME, name="job-card-list", base=job_listing
+                print(f"Found {len(job_cards)} job cards on page {page_num}")
+                
+                # Here, scrape the job cards and add to results
+                for job_card in job_cards:
+                    try:
+                        job = self.scrape_job_card(job_card)
+                        job_results.append(job)
+                        print(f"Scraped job: {job.job_title}")
+                    except Exception as e:
+                        print(f"Error scraping job card: {e}")
+                
+                # Check for pagination and next page
+                pagination_element = WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "ul.artdeco-pagination__pages"))
                 )
-                self.scroll_to_bottom_job_list(job_listing_class_name)
-            except NoSuchElementException:
-                # If the "Next" button is not found, we are on the last page
+                
+                # Check if there's a next page
+                try:
+                    # First try to find the next page based on current active page
+                    active_page = WebDriverWait(self.driver, 5).until(
+                        EC.presence_of_element_located((By.XPATH, 
+                            "//li[contains(@class, 'active') and @data-test-pagination-page-btn]"
+                        ))
+                    )
+                    current_page = int(active_page.get_attribute("data-test-pagination-page-btn"))
+                    next_page = current_page + 1
+                    
+                    # Try to find the next page button
+                    next_button_xpath = f"//li[@data-test-pagination-page-btn='{next_page}']/button"
+                    next_page_button = WebDriverWait(self.driver, 5).until(
+                        EC.element_to_be_clickable((By.XPATH, next_button_xpath))
+                    )
+                    
+                    print(f"Found next page button for page {next_page}")
+                    next_page_button.click()
+                    
+                    # Wait for the page to reload
+                    WebDriverWait(self.driver, 10).until(
+                        EC.staleness_of(job_listing)
+                    )
+                    
+                    # Get the updated job listing element
+                    job_listing = self.wait_for_element_to_load(name=job_listing_class_name)
+                    job_listing = job_listing.find_element(By.XPATH, "./div[1]")
+                    
+                    # Wait for job cards to load on the new page
+                    WebDriverWait(self.driver, 10).until(
+                        EC.presence_of_element_located((By.CLASS_NAME, "job-card-list"))
+                    )
+                    
+                    # Scroll through the new page to load all content
+                    self.scroll_to_bottom_job_list(job_listing_class_name)
+                    
+                except (NoSuchElementException, TimeoutException) as e:
+                    # Try fallback to "Next" button if page number approach failed
+                    try:
+                        next_button = WebDriverWait(self.driver, 5).until(
+                            EC.element_to_be_clickable((
+                                By.XPATH,
+                                "//button[contains(@class, 'artdeco-pagination__button--next')]"
+                            ))
+                        )
+                        print("Using 'Next' button fallback")
+                        next_button.click()
+                        
+                        # Wait for the page to reload
+                        WebDriverWait(self.driver, 10).until(
+                            EC.staleness_of(job_listing)
+                        )
+                        
+                        # Get the updated job listing element
+                        job_listing = self.wait_for_element_to_load(name=job_listing_class_name)
+                        job_listing = job_listing.find_element(By.XPATH, "./div[1]")
+                        
+                        # Wait for job cards to load on the new page
+                        WebDriverWait(self.driver, 10).until(
+                            EC.presence_of_element_located((By.CLASS_NAME, "job-card-list"))
+                        )
+                        
+                        # Scroll through the new page
+                        self.scroll_to_bottom_job_list(job_listing_class_name)
+                        
+                    except (NoSuchElementException, TimeoutException):
+                        print(f"Reached the last page ({page_num}) - no next button found")
+                        break
+                    
+            except (NoSuchElementException, TimeoutException) as e:
+                print(f"Error navigating pagination: {e}")
                 break
-
+        
+        print(f"Total jobs scraped: {len(job_results)}")
         return job_results

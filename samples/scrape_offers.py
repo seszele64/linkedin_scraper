@@ -22,6 +22,9 @@ def main():
     # 90009834 - Poland
     GEOID = int(os.environ.get("LINKEDIN_GEOID", "90009834"))
     
+    # New parameter for max pages to scrape
+    MAX_PAGES = int(os.environ.get("MAX_PAGES", "3"))
+    
     if not LINKEDIN_USERNAME or not LINKEDIN_PASSWORD:
         print("Error: LinkedIn username and password must be set as environment variables")
         sys.exit(1)
@@ -47,10 +50,15 @@ def main():
         # Create JobSearch instance (without scraping by default)
         job_search = JobSearch(driver, scrape=False)
         
-        print(f"Searching for {SEARCH_TERM} jobs...")
+        print(f"Searching for {SEARCH_TERM} jobs across multiple pages (max: {MAX_PAGES})...")
         
-        # Search for jobs
-        jobs = job_search.search(search_term=SEARCH_TERM, geoid=GEOID)
+        # Search for jobs using search_multiple_pages instead of search
+        jobs = job_search.search_multiple_pages(
+            search_term=SEARCH_TERM, 
+            geoid=GEOID, 
+            max_pages=MAX_PAGES,
+            delay_seconds=3
+        )
         
         print(f"Found {len(jobs)} jobs. Saving results...")
         

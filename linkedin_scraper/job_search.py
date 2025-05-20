@@ -3,6 +3,7 @@ from typing import List
 from time import sleep
 import urllib.parse
 import time
+import random  # Add this import for random delays
 
 from .objects import Scraper
 from . import constants as c
@@ -250,15 +251,31 @@ class JobSearch(Scraper):
         self.focus()
         sleep(self.WAIT_FOR_ELEMENT_TIMEOUT)
 
-    def search(self, search_term: str, geoid: int, current_page_index: int = 1) -> List[Job]:
+    def search(self, search_term: str, geoid: int, current_page_index: int = 0, delay_seconds: int = 3) -> List[Job]:
+        """
+        Search for jobs on a single page with the given parameters
+        
+        Args:
+            search_term (str): The job search keywords
+            geoid (int): LinkedIn's location identifier
+            current_page_index (int): Page index (0-based) to start from
+            delay_seconds (int): Delay between operations to appear more human-like
+            
+        Returns:
+            List[Job]: List of job results from the page
+        """
         # Build URL with pagination parameter if needed
-        start_value = current_page_index * 24
+        start_value = current_page_index * 25  # LinkedIn uses 25 jobs per page
         url_params = f"keywords={urllib.parse.quote(search_term)}&geoId={geoid}&refresh=true"
-        if current_page_index > 1:
+        if current_page_index > 0:
             url_params += f"&start={start_value}"
             
         url = os.path.join(self.base_url, "search") + f"?{url_params}"
         self.driver.get(url)
+        
+        # Add initial delay after page load
+        time.sleep(delay_seconds)
+        
         self.scroll_to_bottom()
         self.focus()
         sleep(self.WAIT_FOR_ELEMENT_TIMEOUT)
@@ -271,104 +288,85 @@ class JobSearch(Scraper):
         self.scroll_to_bottom_job_list(job_listing_class_name)
 
         job_results = []
-        current_page = current_page_index
-        max_pages = 20  # Set a reasonable limit to avoid infinite loops
         
-        for page_num in range(current_page, current_page + max_pages):
-            try:
-                # Process job cards on the current page
-                job_cards = self.wait_for_all_elements_to_load(
-                    name="job-card-list", base=job_listing
-                )
-                print(f"Found {len(job_cards)} job cards on page {page_num}")
-                
-                # Here, scrape the job cards and add to results
-                for job_card in job_cards:
-                    try:
-                        job = self.scrape_job_card(job_card)
-                        job_results.append(job)
-                        print(f"Scraped job: {job.job_title}")
-                    except Exception as e:
-                        print(f"Error scraping job card: {e}")
-                
-                # Check for pagination and next page
-                pagination_element = WebDriverWait(self.driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "ul.artdeco-pagination__pages"))
-                )
-                
-                # Check if there's a next page
+        try:
+            # Process job cards on the current page
+            job_cards = self.wait_for_all_elements_to_load(
+                name="job-card-list", base=job_listing
+            )
+            print(f"Found {len(job_cards)} job cards on page {current_page_index + 1}")
+            
+            # Here, scrape the job cards and add to results
+            for i, job_card in enumerate(job_cards):
                 try:
-                    # First try to find the next page based on current active page
-                    active_page = WebDriverWait(self.driver, 5).until(
-                        EC.presence_of_element_located((By.XPATH, 
-                            "//li[contains(@class, 'active') and @data-test-pagination-page-btn]"
-                        ))
-                    )
-                    current_page = int(active_page.get_attribute("data-test-pagination-page-btn"))
-                    next_page = current_page + 1
+                    job = self.scrape_job_card(job_card)
+                    job_results.append(job)
+                    print(f"Scraped job: {job.job_title}")
                     
-                    # Try to find the next page button
-                    next_button_xpath = f"//li[@data-test-pagination-page-btn='{next_page}']/button"
-                    next_page_button = WebDriverWait(self.driver, 5).until(
-                        EC.element_to_be_clickable((By.XPATH, next_button_xpath))
-                    )
-                    
-                    print(f"Found next page button for page {next_page}")
-                    next_page_button.click()
-                    
-                    # Wait for the page to reload
-                    WebDriverWait(self.driver, 10).until(
-                        EC.staleness_of(job_listing)
-                    )
-                    
-                    # Get the updated job listing element
-                    job_listing = self.wait_for_element_to_load(name=job_listing_class_name)
-                    job_listing = job_listing.find_element(By.XPATH, "./div[1]")
-                    
-                    # Wait for job cards to load on the new page
-                    WebDriverWait(self.driver, 10).until(
-                        EC.presence_of_element_located((By.CLASS_NAME, "job-card-list"))
-                    )
-                    
-                    # Scroll through the new page to load all content
-                    self.scroll_to_bottom_job_list(job_listing_class_name)
-                    
-                except (NoSuchElementException, TimeoutException) as e:
-                    # Try fallback to "Next" button if page number approach failed
-                    try:
-                        next_button = WebDriverWait(self.driver, 5).until(
-                            EC.element_to_be_clickable((
-                                By.XPATH,
-                                "//button[contains(@class, 'artdeco-pagination__button--next')]"
-                            ))
-                        )
-                        print("Using 'Next' button fallback")
-                        next_button.click()
+                    # Add delay every few jobs to appear more human-like
+                    if i > 0 and i % 3 == 0:
+                        print(f"Taking a short pause after job {i}...")
+                        time.sleep(delay_seconds)
                         
-                        # Wait for the page to reload
-                        WebDriverWait(self.driver, 10).until(
-                            EC.staleness_of(job_listing)
-                        )
-                        
-                        # Get the updated job listing element
-                        job_listing = self.wait_for_element_to_load(name=job_listing_class_name)
-                        job_listing = job_listing.find_element(By.XPATH, "./div[1]")
-                        
-                        # Wait for job cards to load on the new page
-                        WebDriverWait(self.driver, 10).until(
-                            EC.presence_of_element_located((By.CLASS_NAME, "job-card-list"))
-                        )
-                        
-                        # Scroll through the new page
-                        self.scroll_to_bottom_job_list(job_listing_class_name)
-                        
-                    except (NoSuchElementException, TimeoutException):
-                        print(f"Reached the last page ({page_num}) - no next button found")
-                        break
+                except Exception as e:
+                    print(f"Error scraping job card: {e}")
+        
+        except (NoSuchElementException, TimeoutException) as e:
+            print(f"Error finding job cards: {e}")
+        
+        print(f"Total jobs scraped on this page: {len(job_results)}")
+        return job_results
+
+    def search_multiple_pages(self, search_term: str, geoid: int, max_pages: int = 10, delay_seconds: int = 3) -> List[Job]:
+        """
+        Search for jobs across multiple pages by making separate search requests for each page.
+        
+        Args:
+            search_term (str): The job search keywords
+            geoid (int): LinkedIn's location identifier
+            max_pages (int): Maximum number of pages to scrape
+            delay_seconds (int): Delay between operations to appear more human-like
+            
+        Returns:
+            List[Job]: Combined list of job results from all pages
+        """
+        all_jobs = []
+        total_pages_scraped = 0
+        
+        print(f"Starting multi-page search for '{search_term}' (maximum {max_pages} pages)")
+        
+        for page_index in range(1, max_pages + 1):
+            try:
+                print(f"Searching page {page_index}...")
+                jobs_on_page = self.search(
+                    search_term=search_term, 
+                    geoid=geoid,
+                    current_page_index=page_index - 1,  # LinkedIn uses 0-indexed pages in URL
+                    delay_seconds=delay_seconds
+                )
+                
+                # If we didn't find any jobs, we've likely reached the end
+                if not jobs_on_page:
+                    print(f"No jobs found on page {page_index}, ending search")
+                    break
                     
-            except (NoSuchElementException, TimeoutException) as e:
-                print(f"Error navigating pagination: {e}")
+                all_jobs.extend(jobs_on_page)
+                total_pages_scraped += 1
+                
+                print(f"Found {len(jobs_on_page)} jobs on page {page_index}")
+                print(f"Running total: {len(all_jobs)} jobs")
+                
+                # Add a random delay between page requests
+                random_delay = delay_seconds + (random.random() * delay_seconds)
+                print(f"Taking a break before fetching next page ({random_delay:.2f} seconds)...")
+                time.sleep(random_delay)
+                
+            except Exception as e:
+                print(f"Error processing page {page_index}: {e}")
+                # Print full stack trace for debugging
+                import traceback
+                traceback.print_exc()
                 break
         
-        print(f"Total jobs scraped: {len(job_results)}")
-        return job_results
+        print(f"Multi-page search complete. Scraped {total_pages_scraped} pages with {len(all_jobs)} total jobs.")
+        return all_jobs

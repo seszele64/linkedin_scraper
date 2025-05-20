@@ -12,4 +12,8 @@ chromedriver
 scrape.py
 creds.json
 venv
+.venv
 *.zip
+.env
+
+job_results

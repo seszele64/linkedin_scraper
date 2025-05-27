@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import List, Union
 from time import sleep
 import urllib.parse
 import time
@@ -8,6 +8,7 @@ import random  # Add this import for random delays
 from .objects import Scraper
 from . import constants as c
 from .jobs import Job
+from .enums import WorkplaceType, ExperienceLevel  # Add this import
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
@@ -251,7 +252,9 @@ class JobSearch(Scraper):
         self.focus()
         sleep(self.WAIT_FOR_ELEMENT_TIMEOUT)
 
-    def search(self, search_term: str, geoid: int, current_page_index: int = 0, delay_seconds: int = 3) -> List[Job]:
+    def search(self, search_term: str, geoid: int, current_page_index: int = 0, delay_seconds: int = 3, 
+               workplace_types: List[Union[int, WorkplaceType]] = None, 
+               experience_levels: List[Union[int, ExperienceLevel]] = None) -> List[Job]:
         """
         Search for jobs on a single page with the given parameters
         
@@ -260,7 +263,9 @@ class JobSearch(Scraper):
             geoid (int): LinkedIn's location identifier
             current_page_index (int): Page index (0-based) to start from
             delay_seconds (int): Delay between operations to appear more human-like
-            
+            workplace_types (List[Union[int, WorkplaceType]], optional): List of workplace type filters
+            experience_levels (List[Union[int, ExperienceLevel]], optional): List of experience level filters
+                
         Returns:
             List[Job]: List of job results from the page
         """
@@ -269,6 +274,16 @@ class JobSearch(Scraper):
         url_params = f"keywords={urllib.parse.quote(search_term)}&geoId={geoid}&refresh=true"
         if current_page_index > 0:
             url_params += f"&start={start_value}"
+        
+        # Add workplace type filter
+        if workplace_types:
+            workplace_filter = ",".join(str(int(wt)) for wt in workplace_types)
+            url_params += f"&f_WT={workplace_filter}"
+        
+        # Add experience level filter
+        if experience_levels:
+            experience_filter = ",".join(str(int(exp)) for exp in experience_levels)
+            url_params += f"&f_E={experience_filter}"
             
         url = os.path.join(self.base_url, "search") + f"?{url_params}"
         self.driver.get(url)
@@ -317,7 +332,9 @@ class JobSearch(Scraper):
         print(f"Total jobs scraped on this page: {len(job_results)}")
         return job_results
 
-    def search_multiple_pages(self, search_term: str, geoid: int, max_pages: int = 10, delay_seconds: int = 3) -> List[Job]:
+    def search_multiple_pages(self, search_term: str, geoid: int, max_pages: int = 10, delay_seconds: int = 3, 
+                              workplace_types: List[Union[int, WorkplaceType]] = None, 
+                              experience_levels: List[Union[int, ExperienceLevel]] = None) -> List[Job]:
         """
         Search for jobs across multiple pages by making separate search requests for each page.
         
@@ -326,14 +343,25 @@ class JobSearch(Scraper):
             geoid (int): LinkedIn's location identifier
             max_pages (int): Maximum number of pages to scrape
             delay_seconds (int): Delay between operations to appear more human-like
-            
+            workplace_types (List[Union[int, WorkplaceType]], optional): List of workplace type filters
+            experience_levels (List[Union[int, ExperienceLevel]], optional): List of experience level filters
+                
         Returns:
             List[Job]: Combined list of job results from all pages
         """
         all_jobs = []
         total_pages_scraped = 0
         
-        print(f"Starting multi-page search for '{search_term}' (maximum {max_pages} pages)")
+        # Build filter info for logging
+        filter_info = []
+        if workplace_types:
+            filter_info.append(f"Workplace: {', '.join(WorkplaceType(wt).label for wt in workplace_types)}")
+        
+        if experience_levels:
+            filter_info.append(f"Experience: {', '.join(ExperienceLevel(exp).label for exp in experience_levels)}")
+        
+        filter_str = f" with filters: {'; '.join(filter_info)}" if filter_info else ""
+        print(f"Starting multi-page search for '{search_term}' (maximum {max_pages} pages){filter_str}")
         
         for page_index in range(1, max_pages + 1):
             try:
@@ -342,7 +370,9 @@ class JobSearch(Scraper):
                     search_term=search_term, 
                     geoid=geoid,
                     current_page_index=page_index - 1,  # LinkedIn uses 0-indexed pages in URL
-                    delay_seconds=delay_seconds
+                    delay_seconds=delay_seconds,
+                    workplace_types=workplace_types,
+                    experience_levels=experience_levels
                 )
                 
                 # If we didn't find any jobs, we've likely reached the end

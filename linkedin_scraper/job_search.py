@@ -96,7 +96,39 @@ class JobSearch(Scraper):
             job_div = self.wait_for_element_to_load(
                 name="artdeco-entity-lockup__title", base=base_element
             )
-            base_element.click()
+            
+            # Try multiple click strategies to handle click interception
+            clicked = False
+            
+            # Strategy 1: Scroll to element and try regular click
+            try:
+                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", base_element)
+                sleep(0.5)  # Brief pause after scrolling
+                base_element.click()
+                clicked = True
+            except Exception as e1:
+                print(f"Regular click failed: {e1}")
+                
+                # Strategy 2: Use JavaScript click
+                try:
+                    self.driver.execute_script("arguments[0].click();", base_element)
+                    clicked = True
+                    print("Used JavaScript click as fallback")
+                except Exception as e2:
+                    print(f"JavaScript click failed: {e2}")
+                    
+                    # Strategy 3: Try clicking the job title link directly
+                    try:
+                        a_tag = job_div.find_element(By.TAG_NAME, "a")
+                        self.driver.execute_script("arguments[0].click();", a_tag)
+                        clicked = True
+                        print("Clicked job title link as fallback")
+                    except Exception as e3:
+                        print(f"Job title link click failed: {e3}")
+            
+            if not clicked:
+                print("Warning: Could not click job card, proceeding with available data")
+            
             job_title = self._extract_job_title(job_div.text.strip())
             
             # Extract the job ID path and create a clean LinkedIn URL
